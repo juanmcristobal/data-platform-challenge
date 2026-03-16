@@ -1,0 +1,45 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Pipeline template — copy this file to create a new pipeline
+# ──────────────────────────────────────────────────────────────────────────────
+#
+# 1. Copy to pipelines/airbyte/pipelines/<team>-<dataset>.yaml
+# 2. Set pipeline_key to a unique identifier (convention: <team>_<dataset>_to_<dest>_<layer>)
+# 3. Fill in source and destination parameters
+# 4. Open a PR — Terragrunt will auto-discover the new file on plan/apply
+#
+# SECRETS: Do NOT commit real passwords. In production, inject via:
+#   - AWS Secrets Manager + External Secrets Operator
+#   - Terragrunt get_env() or CI/CD pipeline variables
+#   - See pipelines/airbyte/README.md § Secrets
+# ──────────────────────────────────────────────────────────────────────────────
+
+pipeline_key: team_dataset_to_minio_raw
+enabled: true
+
+source:
+  postgres:
+    host: sequra-postgres-postgresql.data-source.svc.cluster.local
+    port: 5432
+    database: airbyte_source_db
+    schema: public
+    username: airbyte_reader
+    password: CHANGE_ME                    # DEMO — inject from secrets backend in production
+    ssl_mode: disable
+    replication_method: Standard
+
+destination:
+  s3:
+    endpoint: http://sequra-minio.minio.svc.cluster.local:9000
+    bucket: data-lake-raw
+    path: team/dataset
+    region: us-east-1
+    access_key: minioadmin
+    secret_key: CHANGE_ME                  # DEMO — inject from secrets backend in production
+
+connection:
+  status: active
+  schedule_cron: "0 0 0/6 * * ?"
+  streams:
+    - name: table_name
+      namespace: public
+      sync_mode: full_refresh_overwrite

@@ -1,0 +1,31 @@
+\set ON_ERROR_STOP on
+
+%{~ for _, table in tables ~}
+\connect "${table.database}"
+CREATE TABLE IF NOT EXISTS "${table.schema}"."${table.name}" (
+%{~ for idx, column in table.columns ~}
+  "${column.name}" ${column.type}%{ if try(column.nullable, true) == false } NOT NULL%{ endif }%{ if try(column.default, null) != null } DEFAULT ${column.default}%{ endif }%{ if idx < length(table.columns) - 1 },%{ endif }
+%{~ endfor ~}
+);
+%{~ if length(try(table.primary_key, [])) > 0 ~}
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'pk_${table.name}'
+  ) THEN
+    ALTER TABLE "${table.schema}"."${table.name}"
+      ADD CONSTRAINT "pk_${table.name}" PRIMARY KEY (%{ for idx, col in table.primary_key ~}"${col}"%{ if idx < length(table.primary_key) - 1 }, %{ endif }%{ endfor ~});
+  END IF;
+END $$;
+%{~ endif ~}
+%{~ for _, index in try(table.indexes, []) ~}
+CREATE %{ if try(index.unique, false) }UNIQUE %{ endif }INDEX IF NOT EXISTS "${index.name}"
+  ON "${table.schema}"."${table.name}" (%{ for idx, col in index.columns ~}"${col}"%{ if idx < length(index.columns) - 1 }, %{ endif }%{ endfor ~});
+%{~ endfor ~}
+%{~ if try(table.owner, null) != null || try(schema_owners["${table.database}.${table.schema}"], null) != null ~}
+ALTER TABLE "${table.schema}"."${table.name}" OWNER TO "${coalesce(try(table.owner, null), try(schema_owners["${table.database}.${table.schema}"], null))}";
+%{~ endif ~}
+
+%{~ endfor ~}

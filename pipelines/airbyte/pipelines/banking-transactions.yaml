@@ -1,0 +1,53 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Pipeline: PostgreSQL banking transactions → MinIO (S3-compatible) raw layer
+# ──────────────────────────────────────────────────────────────────────────────
+# DEMO ONLY — credentials below are local development defaults.
+#
+# In production, secrets MUST NOT live in this file. Instead:
+#   1. Store credentials in AWS Secrets Manager (or HashiCorp Vault).
+#   2. Use External Secrets Operator to sync them into Kubernetes Secrets.
+#   3. Inject via Terragrunt inputs or CI/CD environment variables:
+#
+#        inputs = {
+#          pg_password  = get_env("PG_AIRBYTE_PASSWORD")
+#          s3_secret_key = get_env("S3_SECRET_KEY")
+#        }
+#
+#   4. Reference in pipeline YAMLs as variable placeholders, resolved at plan/apply.
+#
+# See also: pipelines/airbyte/README.md § Secrets
+# ──────────────────────────────────────────────────────────────────────────────
+
+pipeline_key: postgres_to_minio_banking_transactions
+enabled: true
+
+source:
+  postgres:
+    host: sequra-postgres-postgresql.data-source.svc.cluster.local
+    port: 5432
+    database: airbyte_source_db
+    schema: public
+    username: airbyte_reader
+    password: change-me-reader-pass        # DEMO — see header for production guidance
+    ssl_mode: disable
+    replication_method: Standard
+
+destination:
+  s3:
+    endpoint: http://sequra-minio.minio.svc.cluster.local:9000
+    bucket: data-lake-raw
+    path: banking/demo
+    region: us-east-1
+    access_key: minioadmin
+    secret_key: change-me-minio-password   # DEMO — see header for production guidance
+
+connection:
+  status: active
+  schedule_cron: "0 0 0/6 * * ?"
+  streams:
+    - name: bank_customers
+      namespace: public
+      sync_mode: full_refresh_overwrite
+    - name: card_transactions
+      namespace: public
+      sync_mode: full_refresh_overwrite
